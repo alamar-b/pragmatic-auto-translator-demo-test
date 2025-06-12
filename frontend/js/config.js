@@ -14,7 +14,7 @@ export const MODELS = {
 // Corpus Configuration - Dynamic Path Configuration
 // Detect environment and set base path
 const isGitHubPages = window.location.hostname.includes('github.io');
-const repoName = 'pragmatic-auto-translator-demo'; // Update this to match your actual repo name
+const repoName = 'pragmatic-auto-translator-demo-test'; // Update this to match your actual repo name
 const basePath = isGitHubPages ? `/${repoName}` : '.';
 
 console.log(`Environment: ${isGitHubPages ? 'GitHub Pages' : 'Local'}, Base path: ${basePath}`);
