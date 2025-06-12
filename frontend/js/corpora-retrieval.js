@@ -91,20 +91,29 @@ function setCachedVectors(vectorType, vectorData, language = 'all') {
   try {
     const cacheKey = getCacheKey(vectorType, language);
     
-    // Create lightweight cache data (vectors + minimal metadata, no full text)
+    // Create cache data
     const cacheData = {
       metadata: vectorData.metadata,
-      vectors: vectorData.vectors.map(item => ({
-        id: item.id,
-        document_id: item.document_id,
-        title: item.title,
-        level: item.level,
-        count: item.count,
-        created: item.created,
-        vector: item.vector,
-        // Exclude 'text' field to save cache space
-        textLength: item.text ? item.text.length : 0 // Store length for reference
-      }))
+      vectors: vectorData.vectors.map(item => {
+        const baseItem = {
+          id: item.id,
+          document_id: item.document_id,
+          title: item.title,
+          level: item.level,
+          count: item.count,
+          created: item.created,
+          vector: item.vector,
+          textLength: item.text ? item.text.length : 0
+        };
+        
+        // Include text for sections and paragraphs (needed for context)
+        // Exclude text for documents (too long for DeepSeek anyway)
+        if (vectorType === 'section' || vectorType === 'paragraph') {
+          baseItem.text = item.text;
+        }
+        
+        return baseItem;
+      })
     };
 
     const cacheItem = {
