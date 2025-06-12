@@ -171,7 +171,7 @@ function clearOldCacheEntries() {
 // =====================================
 
 /**
- * Load a single vector file from the server - UPDATED with better validation
+ * Load a single vector file from the server with validation
  * @param {string} filePath - Path to vector file
  * @returns {Promise<Object>} Vector data object
  */
@@ -187,7 +187,7 @@ const loadVectorFile = safeAsync(async (filePath) => {
 
     const vectorData = await response.json();
     
-    // Use detailed validation for better error reporting
+    // Use detailed validation for error reporting
     const validation = validateVectorDataDetailed(vectorData, filePath);
     
     if (!validation.isValid) {
@@ -207,7 +207,7 @@ const loadVectorFile = safeAsync(async (filePath) => {
     
   } catch (error) {
     endTimer();
-    // Enhanced error message for debugging
+    // Error message for debugging
     debugLog(`❌ Failed to load ${filePath}: ${error.message}`, 'error');
     
     // Log additional context if available
@@ -480,7 +480,7 @@ export function getCacheStatus() {
 // =====================================
 
 /**
- * Load document databases for title lookup (matches your existing pattern)
+ * Load document databases for title lookup
  * @returns {Promise<Object>} Document database with english/spanish structure
  */
 export const loadDocumentDatabases = safeAsync(async () => {
@@ -551,7 +551,7 @@ export const loadDocumentDatabases = safeAsync(async () => {
 }, 'VECTOR_LOAD');
 
 /**
- * Get document title from database (matches your existing function)
+ * Get document title from database
  * @param {string} documentId - Document ID to look up
  * @param {Object} documentDatabase - Database loaded from loadDocumentDatabases()
  * @returns {Object} Document info with title, authors, year
@@ -580,7 +580,7 @@ export function getDocumentTitle(documentId, documentDatabase) {
 // =====================================
 
 /**
- * Load vectors in your existing format (matches old vectorData structure)
+ * Load vectors in your existing format 
  * @param {boolean} useCache - Whether to use cached data
  * @returns {Promise<Object>} vectorData with .documents, .paragraphs, .sections arrays
  */
@@ -604,7 +604,7 @@ export const loadVectorDataLegacyFormat = safeAsync(async (useCache = true) => {
 }, 'VECTOR_LOAD');
 
 /**
- * Initialize corpus system with legacy format (matches your existing pattern) - ENHANCED
+ * Initialize corpus system with legacy format
  * @returns {Promise<Object>} Object with vectorData and documentDatabase
  */
 export const initializeCorpusLegacyFormat = safeAsync(async () => {
