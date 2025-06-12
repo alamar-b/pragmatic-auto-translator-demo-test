@@ -60,7 +60,8 @@ export const SIMILARITY = {
   
   // Maximum total context length to send to translation API
   // The number can be updated to reflect your preferences while keeping within DeepSeek context window usages
-  MAX_CONTEXT_LENGTH: 10000, // characters (context passages, not full docs)
+  // 15000 characters is roughly 20-30 paragraphs of context, leaving room for roughly 30,000 characters for source input
+  MAX_CONTEXT_LENGTH: 15000, // characters (context passages, not full docs)
 
   // Similarity strategy options
   STRATEGIES: {
