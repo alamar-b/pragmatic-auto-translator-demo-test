@@ -14,6 +14,31 @@ import {
   storeApiKeyLocally, 
   getApiKeyStatus
 } from './embedding-jina.js';
+import { findSimilarContext } from './similarity.js';
+import { 
+  translateWithContext, 
+  setDeepSeekApiKey, 
+  storeDeepSeekApiKeyLocally, 
+  isDeepSeekApiReady,
+  testDeepSeekConnection 
+} from './translation.js';
+
+/**
+ * Convert markdown-style formatting to HTML
+ * @param {string} text - Text with markdown formatting
+ * @returns {string} HTML formatted text
+ */
+function formatMarkdownText(text) {
+    return text
+        // Headers (do these first, in reverse order so ### doesn't get caught by #)
+        .replace(/^#### (.*$)/gim, '<h4>$1</h4>')         // #### → <h4>
+        .replace(/^### (.*$)/gim, '<h3>$1</h3>')          // ### → <h3>
+        .replace(/^## (.*$)/gim, '<h2>$1</h2>')           // ## → <h2>
+        .replace(/^# (.*$)/gim, '<h1>$1</h1>')            // # → <h1>
+        // Bold and italic (do these after headers)
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // **bold** → <strong>bold</strong>
+        .replace(/\*(.*?)\*/g, '<em>$1</em>');            // *italic* → <em>italic</em>
+}
 
 // =====================================
 // GLOBAL VARIABLES (matching your existing structure)
@@ -45,7 +70,7 @@ const translationOutput = document.getElementById('translationOutput');
 const contextInfo = document.getElementById('contextInfo');
 
 // =====================================
-// IMPROVED STATUS INDICATOR SYSTEM
+// STATUS INDICATOR SYSTEM
 // =====================================
 
 /**
@@ -280,6 +305,13 @@ async function handleTranslation() {
         showStatus('Please enter some text to translate', 'error', 3000);
         return;
     }
+
+    if (translationOutput) {
+        translationOutput.innerHTML = '<p style="color: var(--gray-500); font-style: italic;">Your translation will appear here...</p>';
+    }
+    if (contextInfo) {
+        contextInfo.innerHTML = '<p style="color: var(--gray-500); font-style: italic;">Similar content from the corpus that will inform your translation will be shown here...</p>';
+    }
     
     try {
         // Step 1: Show start message with delay
@@ -371,7 +403,7 @@ async function handleTranslation() {
         // Use existing updateTranslationOutput function
         updateTranslationOutput(
             translationResult.translatedText, 
-            translationResult.contextUsed
+            translationResult.contextUsed.details || []
         );
         
         // Log translation metadata for debugging
@@ -524,7 +556,7 @@ export function updateTranslationOutput(translatedText, contextUsed = []) {
         translationOutput.innerHTML = `
             <div class="translation-result">
                 <h3>Translation:</h3>
-                <p class="translated-text">${translatedText}</p>
+                <div class="translated-text" style="white-space: pre-line; line-height: 1.6;">${formatMarkdownText(translatedText)}</div>
             </div>
         `;
     }
@@ -537,17 +569,26 @@ export function updateTranslationOutput(translatedText, contextUsed = []) {
             </div>
             <div class="context-items">
         `;
-        
+
         contextUsed.forEach((context, index) => {
-            const score = (context.score * 100).toFixed(1);
+            const score = context.score.toFixed(2);
+            const priorityLabel = context.priority === 'document-coherent' ? 'THEMATIC MATCH' : 'HIGH SIMILARITY';
+            
+            // Special handling for document-level matches
+            let textExcerpt;
+            if (context.level === 'document') {
+                textExcerpt = `Used to identify relevant sections and paragraphs`;
+            } else {
+                textExcerpt = context.text ? context.text.split('\n')[0].substring(0, 120) + (context.text.length > 120 ? '...' : '') : 'No text available';
+            }
+            
             contextHTML += `
-                <div class="context-item">
-                    <div class="context-header">
-                        <span class="context-level">${context.level.toUpperCase()}</span>
-                        <span class="context-score">${score}% similar</span>
-                    </div>
-                    <div class="context-title">${context.title || context.document_id || 'Unknown Source'}</div>
-                    <div class="context-preview">${truncateText(context.text, 150)}</div>
+                <div class="context-item" style="margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--gray-200);">
+                    <div style="margin-bottom: 0.25rem;"><strong>Title:</strong> "${context.title}"</div>
+                    <div style="margin-bottom: 0.25rem;"><strong>Level:</strong> ${context.level.toUpperCase()}</div>
+                    <div style="margin-bottom: 0.25rem;"><strong>Type of Match:</strong> ${priorityLabel}</div>
+                    <div style="margin-bottom: 0.25rem;"><strong>Cosine Similarity:</strong> ${score}</div>
+                    <div style="margin-bottom: 0.5rem;"><strong>Text excerpt:</strong> ${textExcerpt}</div>
                 </div>
             `;
         });
@@ -652,10 +693,15 @@ if (config.DEV.DEBUG) {
         loadEmbeddingModel: loadEmbeddingModel,
         setJinaApiKey: window.setJinaApiKey,
         storeJinaKey: window.storeJinaKey,
-        // DeepSeek translation functions
-        setDeepSeekApiKey: window.setDeepSeekApiKey,
-        testDeepSeek: window.testDeepSeek,
-        isTranslationReady: async () => await isDeepSeekApiReady()
+        // ADD THESE SIMILARITY FUNCTIONS:
+        createUserInputEmbedding: createUserInputEmbedding,
+        findSimilarContext: findSimilarContext,
+        // UNCOMMENT AND UPDATE THESE DEEPSEEK FUNCTIONS:
+        setDeepSeekApiKey: setDeepSeekApiKey,
+        storeDeepSeekApiKeyLocally: storeDeepSeekApiKeyLocally,
+        testDeepSeek: testDeepSeekConnection,
+        isTranslationReady: isDeepSeekApiReady,
+        translateWithContext: translateWithContext
     };
     debugLog('Debug helpers attached to window.PragmaticTranslator', 'info');
 }
