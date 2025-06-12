@@ -5,7 +5,15 @@
 import config from './config.js';
 import { debugLog, truncateText } from './utils.js';
 import { initializeCorpusLegacyFormat, getDocumentTitle } from './corpora-retrieval.js';
-
+import { 
+  loadEmbeddingModel, 
+  createUserInputEmbedding, 
+  isEmbeddingModelReady,
+  getEmbeddingModelStatus,
+  setJinaApiKey,
+  storeApiKeyLocally, 
+  getApiKeyStatus
+} from './embedding-jina.js';
 
 // =====================================
 // GLOBAL VARIABLES (matching your existing structure)
