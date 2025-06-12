@@ -1,16 +1,17 @@
 // =====================================
-// JINA EMBEDDINGS - SIMPLIFIED DUAL ENVIRONMENT
+// JINA EMBEDDINGS - ROBUST DUAL ENVIRONMENT
 // =====================================
 
 import config from './config.js';
 import { debugLog, createError, safeAsync, startTimer, cleanText } from './utils.js';
 
+// Will hold static import result
+let STATIC_API_CONFIG = null;
+let staticImportAttempted = false;
+
 // =====================================
 // ENVIRONMENT & CONFIG
 // =====================================
-
-let localApiConfig = null;
-let configLoadAttempted = false;
 
 /**
  * Detect current environment
@@ -24,21 +25,34 @@ function detectEnvironment() {
 }
 
 /**
- * Try to load local API config (only when needed, not during module load)
+ * Get API config with multiple fallback strategies
  */
-async function tryLoadLocalConfig() {
-  if (configLoadAttempted) return localApiConfig;
+async function getApiConfig() {
+  // Strategy 1: Try static import first (if not already attempted)
+  if (!staticImportAttempted) {
+    staticImportAttempted = true;
+    try {
+      const staticImport = await import('./api-config.js');
+      STATIC_API_CONFIG = staticImport.default;
+      debugLog('✅ Static API config import successful', 'info');
+    } catch (error) {
+      debugLog('ℹ️ Static API config import failed (normal for some environments)', 'info');
+    }
+  }
   
-  configLoadAttempted = true;
+  // Use static import result if available
+  if (STATIC_API_CONFIG) {
+    debugLog('Using static API config import', 'info');
+    return STATIC_API_CONFIG;
+  }
   
+  // Strategy 2: Try dynamic import as fallback
   try {
-    // Import your api-config.js structure
     const module = await import('./api-config.js');
-    localApiConfig = module.default; // Get the default export
-    debugLog('✅ Loaded local API config from api-config.js', 'info');
-    return localApiConfig;
+    debugLog('✅ Dynamic API config import successful', 'info');
+    return module.default;
   } catch (error) {
-    debugLog('ℹ️ No local api-config.js found (normal for GitHub Pages)', 'info');
+    debugLog(`❌ Could not load api-config.js: ${error.message}`, 'warn');
     return null;
   }
 }
@@ -89,42 +103,47 @@ export function storeApiKeyLocally(apiKey) {
 }
 
 /**
- * Get API key with smart environment detection - FIXED for your api-config.js structure
+ * Get API key with multiple fallback strategies
  */
 async function getApiKey() {
   const environment = detectEnvironment();
+  debugLog(`Getting API key for environment: ${environment}`, 'info');
   
-  // 1. Check manually set key first (works in both environments)
+  // Strategy 1: Check manually set key first (highest priority)
   if (JINA_CONFIG.API_KEY) {
+    debugLog('✅ Using manually set API key', 'info');
     return JINA_CONFIG.API_KEY;
   }
   
-  // 2. For local development, try multiple sources
-  if (environment === 'local_development') {
-    // 2a. Check localStorage
+  // Strategy 2: Check localStorage (for local development convenience)
+  if (typeof window !== 'undefined' && window.localStorage) {
     const storedKey = localStorage.getItem('jina_api_key');
-    if (storedKey) {
-      debugLog('Using API key from localStorage', 'info');
+    if (storedKey && storedKey !== 'null' && storedKey.length > 10) {
+      debugLog('✅ Using API key from localStorage', 'info');
       return storedKey;
     }
-    
-    // 2b. Try loading from local api-config.js file (FIXED)
-    const localConfig = await tryLoadLocalConfig();
-    if (localConfig?.JINA_CONFIG?.API_KEY) {
-      debugLog('Using API key from api-config.js', 'info');
-      return localConfig.JINA_CONFIG.API_KEY;
-    }
   }
   
-  // 3. For GitHub Pages, try environment variables (if available)
-  if (environment === 'github_pages') {
-    // Check if GitHub Actions injected environment variables
-    if (typeof window !== 'undefined' && window.ENV_VARS?.JINA_API_KEY) {
-      debugLog('Using API key from GitHub environment variables', 'info');
-      return window.ENV_VARS.JINA_API_KEY;
+  // Strategy 3: Try loading from api-config.js file
+  try {
+    const apiConfig = await getApiConfig();
+    if (apiConfig?.JINA_CONFIG?.API_KEY) {
+      const key = apiConfig.JINA_CONFIG.API_KEY;
+      // Validate the key isn't a placeholder
+      if (key && key !== 'your-jina-api-key-here' && key !== 'jina_API-KEY' && key.length > 10) {
+        debugLog(`✅ Using API key from api-config.js (${environment})`, 'info');
+        return key;
+      } else {
+        debugLog('⚠️ API key in api-config.js appears to be a placeholder', 'warn');
+      }
+    } else {
+      debugLog('⚠️ No JINA_CONFIG.API_KEY found in api-config.js', 'warn');
     }
+  } catch (error) {
+    debugLog(`❌ Error accessing api-config.js: ${error.message}`, 'error');
   }
   
+  debugLog('❌ No valid API key found from any source', 'error');
   return null;
 }
 
@@ -136,22 +155,25 @@ export async function getApiKeyStatus() {
   const key = await getApiKey();
   
   let source = 'none';
+  let details = 'No API key available';
   
   if (key) {
     if (JINA_CONFIG.API_KEY && key === JINA_CONFIG.API_KEY) {
       source = 'manual';
+      details = 'Set via setJinaApiKey()';
     } else if (localStorage.getItem('jina_api_key') === key) {
       source = 'localStorage';
-    } else if (environment === 'github_pages') {
-      source = 'github_environment';
+      details = 'Stored in browser localStorage';
     } else {
-      source = 'api_config_file';
+      source = environment === 'github_pages' ? 'github_actions' : 'api_config_file';
+      details = environment === 'github_pages' ? 'Injected by GitHub Actions' : 'Loaded from api-config.js';
     }
   }
   
   return {
     hasKey: !!key,
     source: source,
+    details: details,
     keyPreview: key ? `${key.substring(0, 10)}...` : null,
     environment: environment,
     isProduction: environment === 'github_pages'
@@ -168,7 +190,7 @@ const callJinaAPI = safeAsync(async (input, options = {}) => {
   const apiKey = await getApiKey();
   if (!apiKey) {
     const status = await getApiKeyStatus();
-    throw new Error(`JINA API key not available. Environment: ${status.environment}, Source: ${status.source}. Use setJinaApiKey() or storeApiKeyLocally().`);
+    throw new Error(`JINA API key not available. Environment: ${status.environment}. ${status.details}. Use setJinaApiKey() or configure api-config.js.`);
   }
   
   const inputArray = Array.isArray(input) ? input : [input];
@@ -261,7 +283,7 @@ export const createUserInputEmbedding = safeAsync(async (text) => {
 export const loadEmbeddingModel = safeAsync(async () => {
   const keyStatus = await getApiKeyStatus();
   if (!keyStatus.hasKey) {
-    throw new Error(`JINA API key required. Environment: ${keyStatus.environment}`);
+    throw new Error(`JINA API key required. Environment: ${keyStatus.environment}. ${keyStatus.details}`);
   }
   
   await callJinaAPI('test');
@@ -297,7 +319,7 @@ export const getEmbeddingModelStatus = safeAsync(async () => {
       ...baseStatus,
       status: 'api_key_missing',
       ready: false,
-      message: `JINA API key required for ${keyStatus.environment}`
+      message: `JINA API key required for ${keyStatus.environment}. ${keyStatus.details}`
     };
   }
   
